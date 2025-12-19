@@ -1,12 +1,13 @@
 # Xynenyx LLM Service
 
-LangChain LLM service providing multi-provider abstraction, prompt management, and usage tracking.
+LangChain LLM service providing OpenAI integration with extensible provider abstraction, prompt management, and usage tracking.
 
 ## Overview
 
 The LLM service:
 
-- Abstracts multiple LLM providers (OpenAI, Anthropic, Gemini)
+- Implements OpenAI provider (primary)
+- Uses provider abstraction pattern (extensible for future providers)
 - Implements smart routing and fallback
 - Manages domain-specific prompt templates
 - Tracks usage and costs
