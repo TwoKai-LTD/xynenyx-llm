@@ -59,14 +59,49 @@ class Settings(BaseSettings):
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
+    
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string or JSON list."""
+        if isinstance(v, str):
+            # Try JSON first
+            try:
+                import json
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                # If not JSON, treat as comma-separated string
+                return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     @model_validator(mode="after")
-    def resolve_service_role_key(self):
-        """Resolve service role key from either variable name."""
+    def validate_config(self):
+        """Validate all required configuration."""
+        errors = []
+        
+        # Resolve service role key
         if not self.supabase_service_role_key and self.supabase_service_key:
             self.supabase_service_role_key = self.supabase_service_key
+        
+        # Validate Supabase
+        if not self.supabase_url:
+            errors.append("SUPABASE_URL is required")
+        elif not self.supabase_url.startswith("http"):
+            errors.append("SUPABASE_URL must be a valid HTTP/HTTPS URL")
+        
         if not self.supabase_service_role_key:
-            raise ValueError("Either supabase_service_role_key or supabase_service_key must be set")
+            errors.append("Either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY must be set")
+        
+        # Validate OpenAI if enabled
+        if self.openai_enabled:
+            if not self.openai_api_key:
+                errors.append("OPENAI_API_KEY is required when OPENAI_ENABLED=true")
+            elif self.openai_api_key.startswith("sk-your") or len(self.openai_api_key) < 20:
+                errors.append("OPENAI_API_KEY appears to be invalid or placeholder")
+        
+        if errors:
+            raise ValueError(f"Configuration errors: {', '.join(errors)}")
+        
         return self
 
     model_config = SettingsConfigDict(
