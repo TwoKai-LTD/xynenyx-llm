@@ -60,6 +60,7 @@ class BaseProvider(ABC):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: Dict[str, str] | None = None,
     ) -> CompletionResponse:
         """
         Generate a synchronous completion.
@@ -69,6 +70,7 @@ class BaseProvider(ABC):
             model: Model name (optional, uses default if not provided)
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
+            response_format: Response format specification (e.g., {"type": "json_object"} for JSON mode)
 
         Returns:
             CompletionResponse with content, usage, and metadata
@@ -82,6 +84,7 @@ class BaseProvider(ABC):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: Dict[str, str] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """
         Generate a streaming completion.
@@ -91,6 +94,7 @@ class BaseProvider(ABC):
             model: Model name (optional, uses default if not provided)
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
+            response_format: Response format specification (e.g., {"type": "json_object"} for JSON mode)
 
         Yields:
             StreamChunk objects with tokens or metadata

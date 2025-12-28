@@ -31,11 +31,23 @@ async def complete(
         raise HTTPException(status_code=400, detail="X-User-ID header required")
 
     try:
-        # Get provider
-        provider = provider_router.get_provider(request.provider)
-
         # Convert messages to dict format
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+        # Check cache first (only for low-temperature, deterministic requests)
+        cached_response = _completion_cache.get(messages, request.temperature)
+        if cached_response:
+            logger.info("Returning cached completion")
+            return CompletionResponse(
+                provider=cached_response.get("provider", "openai"),
+                content=cached_response.get("content", ""),
+                model=cached_response.get("model", request.model or "gpt-4o-mini"),
+                usage=cached_response.get("usage", {}),
+                metadata=cached_response.get("metadata", {}),
+            )
+
+        # Get provider
+        provider = provider_router.get_provider(request.provider)
 
         # Generate completion
         response = await provider.complete(
@@ -43,6 +55,24 @@ async def complete(
             model=request.model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            response_format=request.response_format,
+        )
+        
+        # Cache response (only for low-temperature requests)
+        _completion_cache.set(
+            messages,
+            {
+                "provider": provider.name,
+                "content": response.content,
+                "model": response.model,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                },
+                "metadata": response.metadata,
+            },
+            request.temperature,
         )
 
         # Track usage
@@ -106,6 +136,7 @@ async def complete_stream(
                 model=request.model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
+                response_format=request.response_format,
             ):
                 # Track model name from first chunk
                 if model_name is None and chunk.type == "token":

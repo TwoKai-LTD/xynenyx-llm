@@ -100,17 +100,25 @@ class OpenAIProvider(BaseProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: Dict[str, str] | None = None,
     ) -> CompletionResponse:
         """Generate a synchronous completion."""
         try:
             # Create client with specific model if provided
-            client = ChatOpenAI(
-                api_key=self.api_key,
-                model=model or self.default_model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=self.timeout,
-            )
+            client_kwargs = {
+                "api_key": self.api_key,
+                "model": model or self.default_model,
+                "temperature": temperature,
+                "timeout": self.timeout,
+            }
+            if max_tokens:
+                client_kwargs["max_tokens"] = max_tokens
+            
+            # Add response_format if provided (for JSON mode)
+            if response_format:
+                client_kwargs["model_kwargs"] = {"response_format": response_format}
+            
+            client = ChatOpenAI(**client_kwargs)
 
             langchain_messages = self._convert_messages(messages)
             response = await client.ainvoke(langchain_messages)
@@ -144,18 +152,26 @@ class OpenAIProvider(BaseProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: Dict[str, str] | None = None,
     ) -> AsyncIterator[StreamChunk]:
         """Generate a streaming completion."""
         try:
             # Create client with streaming enabled
-            client = ChatOpenAI(
-                api_key=self.api_key,
-                model=model or self.default_model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=self.timeout,
-                streaming=True,
-            )
+            client_kwargs = {
+                "api_key": self.api_key,
+                "model": model or self.default_model,
+                "temperature": temperature,
+                "timeout": self.timeout,
+                "streaming": True,
+            }
+            if max_tokens:
+                client_kwargs["max_tokens"] = max_tokens
+            
+            # Add response_format if provided (for JSON mode)
+            if response_format:
+                client_kwargs["model_kwargs"] = {"response_format": response_format}
+            
+            client = ChatOpenAI(**client_kwargs)
 
             langchain_messages = self._convert_messages(messages)
             usage_data: CompletionUsage | None = None

@@ -1,74 +1,172 @@
-"""Prompt template manager with versioning and variable substitution."""
-from datetime import datetime
-from typing import Dict, Any
-from langchain_core.prompts import ChatPromptTemplate
+"""Prompt manager with versioning support."""
+import logging
+from typing import Dict, Optional
+from app.prompts.templates import PROMPTS, get_prompt
 
-from app.prompts.templates import get_prompt, PROMPTS
+logger = logging.getLogger(__name__)
 
 
 class PromptManager:
-    """Manages prompt templates with versioning and variable substitution."""
+    """Manages prompt templates with versioning support."""
 
     def __init__(self):
         """Initialize prompt manager."""
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
+        self.versions: Dict[str, Dict[str, str]] = {}
+        self.current_versions: Dict[str, str] = {}
+        self.metrics: Dict[str, Dict[str, any]] = {}
+
+    def register_version(
+        self,
+        prompt_name: str,
+        version: str,
+        prompt_content: str,
+        set_as_current: bool = False,
+    ) -> None:
+        """
+        Register a new version of a prompt.
+
+        Args:
+            prompt_name: Name of the prompt (e.g., "rag_qa")
+            version: Version identifier (e.g., "v1", "v2", "2025-01-15")
+            prompt_content: The prompt template content
+            set_as_current: Whether to set this as the current version
+        """
+        if prompt_name not in self.versions:
+            self.versions[prompt_name] = {}
+
+        self.versions[prompt_name][version] = prompt_content
+
+        if set_as_current:
+            self.current_versions[prompt_name] = version
+
+        logger.info(f"Registered prompt version: {prompt_name}@{version}")
 
     def get_prompt(
         self,
-        name: str,
-        variables: Dict[str, Any] | None = None,
-        inject_date: bool = True,
-    ) -> ChatPromptTemplate:
+        prompt_name: str,
+        version: Optional[str] = None,
+    ) -> str:
         """
-        Get a prompt template with variable substitution.
+        Get a prompt template by name and version.
 
         Args:
-            name: Prompt template name
-            variables: Variables to substitute
-            inject_date: Whether to inject current date
+            prompt_name: Name of the prompt
+            version: Optional version identifier (defaults to current version)
 
         Returns:
-            ChatPromptTemplate with variables substituted
+            Prompt template content
         """
-        prompt = get_prompt(name)
+        # If version specified, use it
+        if version:
+            if prompt_name in self.versions and version in self.versions[prompt_name]:
+                return self.versions[prompt_name][version]
+            logger.warning(f"Version {version} not found for {prompt_name}, using default")
 
-        # Prepare variables
-        vars_dict = variables or {}
-        if inject_date and "current_date" not in vars_dict:
-            vars_dict["current_date"] = self.current_date
+        # Use current version if set
+        if prompt_name in self.current_versions:
+            current_version = self.current_versions[prompt_name]
+            if prompt_name in self.versions and current_version in self.versions[prompt_name]:
+                return self.versions[prompt_name][current_version]
 
-        # Return prompt (variables will be substituted when format() is called)
-        return prompt
+        # Fallback to default prompt from templates
+        try:
+            prompt_template = get_prompt(prompt_name)
+            # Extract system message content
+            messages = prompt_template.messages
+            for role, content in messages:
+                if role == "system":
+                    return content
+            return str(prompt_template)
+        except ValueError:
+            logger.error(f"Prompt {prompt_name} not found")
+            return ""
 
-    def format_prompt(
+    def set_current_version(self, prompt_name: str, version: str) -> None:
+        """
+        Set the current version for a prompt.
+
+        Args:
+            prompt_name: Name of the prompt
+            version: Version identifier to set as current
+        """
+        if prompt_name not in self.versions:
+            logger.warning(f"Prompt {prompt_name} has no registered versions")
+            return
+
+        if version not in self.versions[prompt_name]:
+            logger.warning(f"Version {version} not found for {prompt_name}")
+            return
+
+        self.current_versions[prompt_name] = version
+        logger.info(f"Set current version for {prompt_name} to {version}")
+
+    def track_metric(
         self,
-        name: str,
-        variables: Dict[str, Any] | None = None,
-        inject_date: bool = True,
-    ) -> ChatPromptTemplate:
+        prompt_name: str,
+        version: str,
+        metric_name: str,
+        value: float,
+    ) -> None:
         """
-        Format a prompt template with variables.
+        Track a performance metric for a prompt version.
 
         Args:
-            name: Prompt template name
-            variables: Variables to substitute
-            inject_date: Whether to inject current date
+            prompt_name: Name of the prompt
+            version: Version identifier
+            metric_name: Name of the metric (e.g., "accuracy", "latency", "user_satisfaction")
+            value: Metric value
+        """
+        key = f"{prompt_name}@{version}"
+        if key not in self.metrics:
+            self.metrics[key] = {}
+
+        if metric_name not in self.metrics[key]:
+            self.metrics[key][metric_name] = []
+
+        self.metrics[key][metric_name].append(value)
+
+    def get_metrics(
+        self,
+        prompt_name: str,
+        version: Optional[str] = None,
+    ) -> Dict[str, any]:
+        """
+        Get metrics for a prompt version.
+
+        Args:
+            prompt_name: Name of the prompt
+            version: Optional version identifier (defaults to current version)
 
         Returns:
-            Formatted ChatPromptTemplate
+            Dictionary of metrics
         """
-        return self.get_prompt(name, variables, inject_date)
+        if version:
+            key = f"{prompt_name}@{version}"
+        else:
+            current_version = self.current_versions.get(prompt_name, "default")
+            key = f"{prompt_name}@{current_version}"
 
-    def list_prompts(self) -> list[str]:
+        return self.metrics.get(key, {})
+
+    def list_versions(self, prompt_name: str) -> list[str]:
         """
-        List all available prompt templates.
+        List all versions for a prompt.
+
+        Args:
+            prompt_name: Name of the prompt
 
         Returns:
-            List of prompt names
+            List of version identifiers
         """
-        return list(PROMPTS.keys())
+        if prompt_name not in self.versions:
+            return []
+        return list(self.versions[prompt_name].keys())
 
-    def update_date(self) -> None:
-        """Update the current date (useful for long-running services)."""
-        self.current_date = datetime.now().strftime("%Y-%m-%d")
 
+# Global prompt manager instance
+_prompt_manager = PromptManager()
+
+
+def get_prompt_manager() -> PromptManager:
+    """Get the global prompt manager instance."""
+    return _prompt_manager

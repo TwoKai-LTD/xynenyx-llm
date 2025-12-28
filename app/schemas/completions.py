@@ -18,6 +18,10 @@ class CompletionRequest(BaseModel):
     model: Optional[str] = Field(None, description="Model name. Defaults to provider default.")
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: Optional[int] = Field(None, gt=0, description="Maximum tokens to generate")
+    response_format: Optional[Dict[str, str]] = Field(
+        None,
+        description="Response format specification. For OpenAI, use {'type': 'json_object'} for JSON mode.",
+    )
 
 
 class CompletionResponse(BaseModel):
