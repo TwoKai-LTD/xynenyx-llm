@@ -3,17 +3,22 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import json
+import logging
 
 from app.schemas.completions import CompletionRequest, CompletionResponse, StreamChunk
 from app.providers.router import ProviderRouter
 from app.tracking.usage import UsageTracker
 from app.providers.base import CompletionUsage
+from app.services.cache import CompletionCache
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/complete", tags=["completions"])
 
 # Initialize dependencies
 provider_router = ProviderRouter()
 usage_tracker = UsageTracker()
+_completion_cache = CompletionCache(ttl_seconds=3600)  # 1 hour cache
 
 
 @router.post("", response_model=CompletionResponse)
